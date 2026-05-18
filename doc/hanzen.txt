@@ -1,0 +1,112 @@
+*hanzen.txt*	Selective Japanese width normalization for Neovim
+
+==============================================================================
+CONTENTS						*hanzen-contents*
+
+	1. Introduction .................... |hanzen-introduction|
+	2. Why not NFKC .................... |hanzen-why-not-nfkc|
+	3. The :Hanzen command ............. |:Hanzen|
+	4. Lua API ......................... |hanzen-api|
+	5. Configuration ................... |hanzen-config|
+	6. Extending ....................... |hanzen-extending|
+
+==============================================================================
+1. INTRODUCTION						*hanzen-introduction*
+
+hanzen.nvim converts between halfwidth (hankaku, 半角) and fullwidth
+(zenkaku, 全角) characters, one direction at a time, on demand.
+
+	katakana   hankaku -> zenkaku   ｱｲｳ ｶﾞ ﾊﾟ -> アイウ ガ パ
+	alphanum   zenkaku -> hankaku   ＡＢＣ １２３ ！ -> ABC 123 !
+	all        both                 runs katakana then alphanum
+
+"katakana" composes dakuten/handakuten (e.g. ｶﾞ -> ガ, ﾊﾟ -> パ) and
+touches only the halfwidth katakana block (U+FF61..U+FF9F).
+
+"alphanum" covers the fullwidth ASCII block (U+FF01..U+FF5E): letters,
+digits and symbols. The fullwidth space U+3000 is intentionally NOT
+converted.
+
+==============================================================================
+2. WHY NOT NFKC						*hanzen-why-not-nfkc*
+
+Unicode NFKC normalization performs both conversions at once and is the
+right tool when you want everything folded. hanzen.nvim exists for what
+NFKC cannot express:
+
+- NFKC is monolithic: it always folds fullwidth ASCII -> halfwidth AND
+  halfwidth kana -> fullwidth together. hanzen gives independent,
+  directional verbs.
+- NFKC also rewrites ① -> 1, ㍻ -> 平成, ™ ligatures, （）-> () and more
+  - changes a Markdown author often intends to keep. hanzen touches only
+  the two width blocks named above.
+- Pure Lua, no external dependency.
+
+If you want the full NFKC hammer, use NFKC. If you want a scalpel, use
+this.
+
+==============================================================================
+3. THE :HANZEN COMMAND						*:Hanzen*
+
+							*hanzen-command*
+:[range]Hanzen[!] [{subcommand}]
+
+	{subcommand} is one of "katakana", "alphanum", "all". With no
+	argument the configured default is used (|hanzen-config|).
+
+	[range]   restricts conversion to the given lines. With no range
+		  the whole buffer is converted. Visual selection works
+		  via :'<,'>Hanzen.
+
+	!	  dry-run. Reports which lines WOULD change via
+		  |vim.notify| and makes no edits.
+
+	The cursor and window view are preserved. A non-modifiable buffer
+	is reported, not an error.
+
+Examples: ~
+>
+	:Hanzen katakana
+	:Hanzen! alphanum
+	:'<,'>Hanzen alphanum
+	:10,20Hanzen all
+<
+Completion of {subcommand} is available with <Tab>.
+
+==============================================================================
+4. LUA API						*hanzen-api*
+
+							*hanzen.convert()*
+require("hanzen").convert({name}, {opts})
+
+	{name}	"katakana" | "alphanum" | "all"
+	{opts}	optional table: >
+		{ line1 = <int>, line2 = <int>, dry_run = <bool> }
+<	Returns: >
+		{ changed = <int>, lnums = <int[]>,
+		  dry_run = <bool>, blocked = <bool> }
+<
+							*hanzen.setup()*
+require("hanzen").setup({opts})		see |hanzen-config|.
+
+==============================================================================
+5. CONFIGURATION					*hanzen-config*
+
+Defaults: ~
+>
+	require("hanzen").setup({
+	  default = "katakana", -- bare :Hanzen subcommand
+	  notify  = true,       -- vim.notify summary after running
+	})
+<
+setup() is optional; :Hanzen works without it.
+
+==============================================================================
+6. EXTENDING						*hanzen-extending*
+
+Each converter is a pure function(text) -> text. To add one, create
+lua/hanzen/<name>.lua exposing convert(), then register it in the
+`converters` table in lua/hanzen/init.lua and add its name to
+M.subcommands. The command and range engine need no changes.
+
+vim:tw=78:ts=8:noet:ft=help:norl:
