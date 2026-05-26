@@ -13,37 +13,84 @@ CONTENTS						*hanzen-contents*
 ==============================================================================
 1. INTRODUCTION						*hanzen-introduction*
 
-hanzen.nvim converts between halfwidth (hankaku, 半角) and fullwidth
-(zenkaku, 全角) characters, one direction at a time, on demand.
+hanzen.nvim exposes the folds NFKC performs as separate, directional
+verbs. You can apply one verb at a time, scoped to a range or visual
+selection.
 
-	katakana   hankaku -> zenkaku   ｱｲｳ ｶﾞ ﾊﾟ -> アイウ ガ パ
-	alphanum   zenkaku -> hankaku   ＡＢＣ １２３ ！ -> ABC 123 !
-	all        both                 runs katakana then alphanum
+	katakana    hankaku -> zenkaku     ｱｲｳ ｶﾞ ﾊﾟ -> アイウ ガ パ
+	alphanum    zenkaku -> hankaku     ＡＢＣ １２３ ！ -> ABC 123 !
+	space       zenkaku -> hankaku     U+3000 -> ASCII (config: space_*)
+	compat      ligature -> decomposed ㍻ -> 平成, ㎏ -> kg, ㍿ -> 株式会社
+	enclosed    enclosed -> bare       ㈱ -> (株), ㊙ -> 秘, ㋿ -> 令和
+	all         every verb above       runs each in registration order
+	flush-all   like 'all', but also converts a leading-indent U+3000 run
+	            (ignores space_keep_leading_indent for this one call)
 
 "katakana" composes dakuten/handakuten (e.g. ｶﾞ -> ガ, ﾊﾟ -> パ) and
 touches only the halfwidth katakana block (U+FF61..U+FF9F).
 
 "alphanum" covers the fullwidth ASCII block (U+FF01..U+FF5E): letters,
-digits and symbols. The fullwidth space U+3000 is intentionally NOT
-converted.
+digits and symbols. The fullwidth space U+3000 is left for 'space'.
+
+"compat" covers the CJK Compatibility block (U+3300..U+33FF) — square
+katakana abbreviations, SI/derived units, era names (㍻ ㍼ ㍽ ㍾),
+株式会社 (㍿), and day/score lookups (1日..31日, 0点..24点).
+
+"enclosed" covers the Enclosed CJK Letters and Months block
+(U+3200..U+32FF) — parenthesized abbreviations (㈱ -> (株), ㈲ -> (有)),
+circled ideographs (㊀ -> 一, ㊙ -> 秘), enclosed numerals 21..50
+(㉑ -> 21), circled month abbreviations (㋀ -> 1月), circled katakana
+(㋐ -> ア), and the Reiwa era ㋿ -> 令和. These are the common
+"機種依存文字" (platform-dependent characters) of Japanese business
+documents.
 
 ==============================================================================
 2. WHY NOT NFKC						*hanzen-why-not-nfkc*
 
-Unicode NFKC normalization performs both conversions at once and is the
-right tool when you want everything folded. hanzen.nvim exists for what
-NFKC cannot express:
+Unicode NFKC folds every transformation it knows in one pass: width
+changes, halfwidth-kana composition, CJK Compatibility decomposition
+(㍻ -> 平成, ㎏ -> kg), circled-numeral flattening, and more. It is
+the right tool when ALL of those at once is what you want.
 
-- NFKC is monolithic: it always folds fullwidth ASCII -> halfwidth AND
-  halfwidth kana -> fullwidth together. hanzen gives independent,
-  directional verbs.
-- NFKC also rewrites ① -> 1, ㍻ -> 平成, ™ ligatures, （）-> () and more
-  - changes a Markdown author often intends to keep. hanzen touches only
-  the two width blocks named above.
+hanzen exposes the same folds, but one verb at a time:
+
+- Independent, directional verbs. :Hanzen katakana only composes
+  halfwidth katakana. :Hanzen compat only decomposes the CJK
+  Compatibility block. You can fix stray halfwidth katakana without
+  rewriting fullwidth brackets, or normalize unit ligatures without
+  touching spaces.
+- 'all' is the complete verb set, applied in one pass. When a verb is
+  added to hanzen, 'all' (and 'flush-all') grow to include it.
+  Behavior changes between releases are recorded in CHANGELOG.
 - Pure Lua, no external dependency.
+- In-editor and range-aware: :Hanzen <Tab> completion, dry-run preview
+  (:Hanzen!), visual/range scoping, and a small Lua API.
 
-If you want the full NFKC hammer, use NFKC. If you want a scalpel, use
-this.
+If you want every fold at once outside the editor, use NFKC (nkf,
+jaconv, mojimoji, ...). If you want them as separate verbs in the
+buffer, use this.
+
+==============================================================================
+NON-GOALS						*hanzen-non-goals*
+
+Some things are deliberately out of scope:
+
+- No context inference by default. hanzen converts the lines it is
+  given. Scope it with a range, a visual selection, or
+  `protect = "treesitter"` (skips Markdown code blocks and inline
+  code; falls back to no protection if no parser is available — it
+  never guesses).
+- No lossy reverse direction. Fullwidth katakana -> halfwidth,
+  ASCII -> fullwidth ASCII, etc. are not provided. mojimoji and other
+  dedicated tools cover that direction.
+- No other whitespace. ASCII spaces, tabs, trailing whitespace and
+  line endings are not normalized. The 'space' verb is U+3000-only.
+- Per-verb scope is the Unicode block. Each verb operates inside its
+  named block. Cross-block conveniences belong in new verbs.
+
+'all' (and 'flush-all') is the complete set of registered verbs in
+order. When a verb is added, 'all' extends to include it — this is
+by design; behavior changes are recorded in CHANGELOG.
 
 ==============================================================================
 3. THE :HANZEN COMMAND						*:Hanzen*
@@ -51,8 +98,9 @@ this.
 							*hanzen-command*
 :[range]Hanzen[!] [{subcommand}]
 
-	{subcommand} is one of "katakana", "alphanum", "all". With no
-	argument the configured default is used (|hanzen-config|).
+	{subcommand} is one of "katakana", "alphanum", "space", "compat",
+	"enclosed", "all", "flush-all". With no argument the configured
+	default is used (|hanzen-config|).
 
 	[range]   restricts conversion to the given lines. With no range
 		  the whole buffer is converted. Visual selection works
@@ -70,6 +118,7 @@ Examples: ~
 	:Hanzen! alphanum
 	:'<,'>Hanzen alphanum
 	:10,20Hanzen all
+	:Hanzen flush-all
 <
 Completion of {subcommand} is available with <Tab>.
 
@@ -79,7 +128,8 @@ Completion of {subcommand} is available with <Tab>.
 							*hanzen.convert()*
 require("hanzen").convert({name}, {opts})
 
-	{name}	"katakana" | "alphanum" | "all"
+	{name}	"katakana" | "alphanum" | "space" | "compat" |
+		"enclosed" | "all" | "flush-all"
 	{opts}	optional table: >
 		{ line1 = <int>, line2 = <int>, dry_run = <bool> }
 <	Returns: >

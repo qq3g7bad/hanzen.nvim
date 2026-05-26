@@ -41,12 +41,17 @@ describe("buffer / range engine", function()
     assert.same({ "ＡＢＣ", "x" }, get_buf())
   end)
 
-  it("'all' applies every converter (incl. space)", function()
-    -- ｱ + U+3000 + ＡＢＣ : kana->zen, U+3000->" ", ascii->han
-    set_buf({ "ｱ" .. "\227\128\128" .. "ＡＢＣ" })
-    hanzen.convert("all")
-    assert.same({ "ア ABC" }, get_buf())
-  end)
+  it(
+    "'all' applies every converter (kana, ascii, space, compat, enclosed)",
+    function()
+      -- ｱ + U+3000 + ＡＢＣ + ㍻ + ㈱: katakana, space, alphanum, compat,
+      -- enclosed. 'all' is the **complete** verb set — every registered
+      -- converter runs; see README "Non-goals".
+      set_buf({ "ｱ" .. "\227\128\128" .. "ＡＢＣ" .. "㍻" .. "㈱" })
+      hanzen.convert("all")
+      assert.same({ "ア ABC平成(株)" }, get_buf())
+    end
+  )
 
   it("preserves leading fullwidth indent by default", function()
     local FW = "\227\128\128" -- U+3000
@@ -54,6 +59,21 @@ describe("buffer / range engine", function()
     set_buf({ FW .. FW .. "あ" .. FW .. "い" })
     hanzen.convert("space")
     assert.same({ FW .. FW .. "あ い" }, get_buf())
+  end)
+
+  it("flush-all converts leading U+3000 too", function()
+    local FW = "\227\128\128" -- U+3000
+    -- same input as the test above; flush-all collapses everything
+    set_buf({ FW .. FW .. "あ" .. FW .. "い" })
+    hanzen.convert("flush-all")
+    assert.same({ "  あ い" }, get_buf())
+  end)
+
+  it("flush-all also runs katakana + alphanum", function()
+    local FW = "\227\128\128" -- U+3000
+    set_buf({ FW .. "ｱ" .. FW .. "ＡＢＣ" })
+    hanzen.convert("flush-all")
+    assert.same({ " ア ABC" }, get_buf())
   end)
 
   it("reports a non-modifiable buffer instead of erroring", function()
