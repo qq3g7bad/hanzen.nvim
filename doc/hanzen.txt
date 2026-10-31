@@ -80,8 +80,9 @@ Some things are deliberately out of scope:
 - No context inference by default. hanzen converts the lines it is
   given. Scope it with a range, a visual selection, or
   `protect = "treesitter"` (skips Markdown code blocks and inline
-  code; falls back to no protection if no parser is available — it
-  never guesses).
+  code in buffers whose filetype maps to the markdown parser; other
+  filetypes have nothing protected; falls back to no protection if no
+  parser is available — it never guesses).
 - No lossy reverse direction. Fullwidth katakana -> halfwidth,
   ASCII -> fullwidth ASCII, etc. are not provided. mojimoji and other
   dedicated tools cover that direction.

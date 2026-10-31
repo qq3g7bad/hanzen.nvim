@@ -11,6 +11,9 @@
 --   "treesitter" -> Markdown fenced/indented code blocks and inline code
 --                   spans, when a parser is available. If it is not, this
 --                   degrades to {} and reports it -- it never guesses.
+--                   Only buffers whose filetype maps to the `markdown`
+--                   language are parsed; any other filetype has nothing
+--                   to protect, so it gets {} (not degraded).
 --
 -- treesitter's *runtime* is in Neovim core; only the `markdown` /
 -- `markdown_inline` grammars are external (bundled with Neovim >= 0.10).
@@ -25,12 +28,26 @@ local QUERY = {
   markdown_inline = "(code_span) @p",
 }
 
+-- Parsed queries, per language; parsing them on every call is wasted work.
+local parsed = {}
+
+local function get_query(lang)
+  if not parsed[lang] then
+    parsed[lang] = vim.treesitter.query.parse(lang, QUERY[lang])
+  end
+  return parsed[lang]
+end
+
 -- Returns a span list, or nil if a markdown parser could not be obtained
 -- (any treesitter error degrades to nil -- a failed parse must never break
 -- an edit).
 local function treesitter_spans(buf)
   if not (vim.treesitter and vim.treesitter.get_parser) then
     return nil
+  end
+  local ft = vim.bo[buf].filetype
+  if (vim.treesitter.language.get_lang(ft) or ft) ~= "markdown" then
+    return {} -- not Markdown: no code regions to protect
   end
   local ok, spans = pcall(function()
     local parser = vim.treesitter.get_parser(buf, "markdown")
@@ -40,11 +57,10 @@ local function treesitter_spans(buf)
     parser:parse(true) -- include injected markdown_inline trees
     local acc = {}
     parser:for_each_tree(function(tree, ltree)
-      local src = QUERY[ltree:lang()]
-      if not src then
+      if not QUERY[ltree:lang()] then
         return
       end
-      local query = vim.treesitter.query.parse(ltree:lang(), src)
+      local query = get_query(ltree:lang())
       for _, node in query:iter_captures(tree:root(), buf) do
         local sr, sc, er, ec = node:range()
         acc[#acc + 1] = { sr, sc, er, ec }

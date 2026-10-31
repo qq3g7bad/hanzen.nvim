@@ -153,8 +153,11 @@ require("hanzen").setup({
 
 `protect = "treesitter"` leaves fenced/indented code blocks and inline
 code spans untouched, using the `markdown` / `markdown_inline` grammars
-(bundled with Neovim ≥ 0.10). If they are unavailable it converts with no
-protection and says so — it never guesses where code is. It can also be
+(bundled with Neovim ≥ 0.10). It applies only to buffers whose filetype
+maps to the `markdown` parser; in any other buffer (Lua, Python, …)
+nothing is protected and every line is converted. If the grammars are
+unavailable it converts with no protection and says so — it never
+guesses where code is. It can also be
 set per call: `require("hanzen").convert("alphanum", { protect = "treesitter" })`.
 
 ## Development

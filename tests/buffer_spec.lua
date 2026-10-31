@@ -126,6 +126,7 @@ describe("engine: treesitter protect (integration)", function()
 
   before_each(function()
     vim.cmd("enew!")
+    vim.bo.filetype = "markdown"
   end)
 
   it("skips Markdown code, converts prose", function()
@@ -163,4 +164,12 @@ describe("engine: treesitter protect (integration)", function()
       assert.same({ "ABC" }, get_buf())
     end
   )
+
+  it("converts every line of a non-Markdown buffer", function()
+    vim.bo.filetype = "python"
+    set_buf({ "def f():", "", "    s = 'ＡＢＣ'  # `ＤＥＦ`" })
+    local r = hanzen.convert("alphanum", { protect = "treesitter" })
+    assert.is_false(r.degraded)
+    assert.same({ "def f():", "", "    s = 'ABC'  # `DEF`" }, get_buf())
+  end)
 end)
