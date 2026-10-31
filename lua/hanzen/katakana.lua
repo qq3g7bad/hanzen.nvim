@@ -108,24 +108,26 @@ local SINGLE_MAP = {
   ["ﾟ"] = "゜",
 }
 
--- Halfwidth katakana is encoded as 3-byte UTF-8 with every byte >= 0x80,
--- so none of the map keys contain Lua pattern magic characters and plain
--- gsub is safe.
+-- Halfwidth katakana (U+FF61..U+FF9F) is 3-byte UTF-8 starting EF BD or
+-- EF BE; this pattern matches any character of U+FF40..U+FFBF. Characters
+-- in that range that are not katakana have no map entry and are kept.
+local CHAR = "\239[\189\190][\128-\191]"
+-- ﾞ (U+FF9E) or ﾟ (U+FF9F), as the second half of a composite.
+local MARK = "\239\190[\158\159]"
+
 ---Convert halfwidth katakana to fullwidth katakana.
 ---@param text string
 ---@return string
 function M.convert(text)
-  local out = text
-
-  for half, full in pairs(COMPOSITE_MAP) do
-    out = out:gsub(half, full)
+  if not text:find("\239[\189\190]") then
+    return text -- fast path: nothing in the halfwidth block
   end
-
-  for half, full in pairs(SINGLE_MAP) do
-    out = out:gsub(half, full)
-  end
-
-  return out
+  -- A nil from the callback keeps the match, so a base kana + mark pair
+  -- with no composite (e.g. ｱﾞ) falls through to the single-char pass.
+  text = text:gsub("(" .. CHAR .. MARK .. ")", function(pair)
+    return COMPOSITE_MAP[pair]
+  end)
+  return (text:gsub(CHAR, SINGLE_MAP))
 end
 
 return M

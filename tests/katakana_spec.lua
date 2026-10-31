@@ -28,6 +28,18 @@ describe("katakana han -> zen", function()
     )
   end)
 
+  it("splits a mark that has no composite", function()
+    assert.equals("ア゛", k.convert("ｱﾞ"))
+    assert.equals("゛゜", k.convert("ﾞﾟ"))
+    assert.equals("ガ゛", k.convert("ｶﾞﾞ"))
+  end)
+
+  it("leaves the rest of the U+FF40..U+FFBF range alone", function()
+    -- fullwidth ｚ (U+FF5A) and halfwidth hangul ﾡ (U+FFA1) share the
+    -- katakana lead bytes but are not katakana
+    assert.equals("ｚﾡ", k.convert("ｚﾡ"))
+  end)
+
   it("leaves ascii and fullwidth text alone", function()
     assert.equals("Hello 日本語 123", k.convert("Hello 日本語 123"))
   end)
