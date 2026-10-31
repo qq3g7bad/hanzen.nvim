@@ -11,6 +11,7 @@ describe("katakana han -> zen", function()
       k.convert("ｶﾞｷﾞｸﾞｹﾞｺﾞ")
     )
     assert.equals("ヴ", k.convert("ｳﾞ"))
+    assert.equals("ヷ ヺ", k.convert("ﾜﾞ ｦﾞ"))
   end)
 
   it("composes handakuten", function()

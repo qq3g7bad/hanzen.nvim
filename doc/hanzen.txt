@@ -26,8 +26,10 @@ selection.
 	flush-all   like 'all', but also converts a leading-indent U+3000 run
 	            (ignores space_keep_leading_indent for this one call)
 
-"katakana" composes dakuten/handakuten (e.g. ｶﾞ -> ガ, ﾊﾟ -> パ) and
-touches only the halfwidth katakana block (U+FF61..U+FF9F).
+"katakana" composes dakuten/handakuten (e.g. ｶﾞ -> ガ, ﾊﾟ -> パ,
+ﾜﾞ -> ヷ) and touches only the halfwidth katakana block (U+FF61..U+FF9F).
+A lone ﾞ / ﾟ becomes the spacing mark ゛ / ゜ (U+309B / U+309C), not the
+combining U+3099 / U+309A that NFKC would produce.
 
 "alphanum" covers the fullwidth ASCII block (U+FF01..U+FF5E): letters,
 digits and symbols. The fullwidth space U+3000 is left for 'space'.
