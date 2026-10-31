@@ -38,11 +38,29 @@ local converters = {
 -- subcommand because the only difference is the leading-indent override.
 local flush_space = make_space(true)
 
--- Order used by the `all` / `flush-all` pseudo-converters. The byte ranges
--- are disjoint, so order does not affect the result; it only affects
--- reporting. `all` is the **complete** set of registered verbs — adding a
--- verb extends `all` by design (see README "Non-goals").
+-- Verbs chained by the `all` / `flush-all` pseudo-converters. The byte
+-- ranges are disjoint and no verb's output is another verb's input, so the
+-- order does not affect the result. `all` is the **complete** set of
+-- registered verbs — adding a verb extends `all` by design (see README
+-- "Non-goals").
 local ALL = { "katakana", "alphanum", "space", "compat", "enclosed" }
+
+-- One text function running every verb in turn, so the engine parses,
+-- counts and writes back once: a line with several kinds of target is
+-- reported once, not once per verb.
+local function chain(flush)
+  local fns = {}
+  for _, key in ipairs(ALL) do
+    fns[#fns + 1] = (flush and key == "space") and flush_space
+      or converters[key]
+  end
+  return function(text, ctx)
+    for _, fn in ipairs(fns) do
+      text = fn(text, ctx)
+    end
+    return text
+  end
+end
 
 ---@class hanzen.Config
 ---@field default string Subcommand used when `:Hanzen` is called with no argument.
@@ -131,24 +149,7 @@ function M.convert(name, opts)
   local engine = require("hanzen.convert")
 
   if name == "all" or name == "flush-all" then
-    local total = {
-      changed = 0,
-      lnums = {},
-      dry_run = opts.dry_run or false,
-      blocked = false,
-      protect = opts.protect,
-      degraded = false,
-    }
-    local flush = (name == "flush-all")
-    for _, key in ipairs(ALL) do
-      local fn = (flush and key == "space") and flush_space or converters[key]
-      local r = engine.apply(fn, opts)
-      total.changed = total.changed + r.changed
-      total.blocked = total.blocked or r.blocked
-      total.degraded = total.degraded or r.degraded
-      vim.list_extend(total.lnums, r.lnums)
-    end
-    return total
+    return engine.apply(chain(name == "flush-all"), opts)
   end
 
   local fn = converters[name]

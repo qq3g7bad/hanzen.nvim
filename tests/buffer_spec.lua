@@ -53,6 +53,13 @@ describe("buffer / range engine", function()
     end
   )
 
+  it("'all' counts a line once however many verbs touch it", function()
+    set_buf({ "ｱＡ㍻", "x", "ＢＢ", "ｲ" .. "\227\128\128" .. "㈱" })
+    local r = hanzen.convert("all", { dry_run = true })
+    assert.equals(3, r.changed)
+    assert.same({ 1, 3, 4 }, r.lnums)
+  end)
+
   it("preserves leading fullwidth indent by default", function()
     local FW = "\227\128\128" -- U+3000
     -- leading indent (2x U+3000) kept; interior U+3000 -> one ASCII space
