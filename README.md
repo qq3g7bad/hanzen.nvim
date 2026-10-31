@@ -47,7 +47,7 @@ hanzen exposes the same folds, but **one verb at a time**:
 - **`all` is the complete verb set, applied in one pass.** When a verb
   is added to hanzen, `all` (and `flush-all`) grow with it — the table
   above is the source of truth; behavior changes between releases are
-  called out in CHANGELOG.
+  called out in [CHANGELOG](./CHANGELOG.md).
 - **Zero runtime dependencies.** Pure Lua — nothing to install, nothing
   to shell out to.
 - **In-editor and range-aware.** `:Hanzen <Tab>` completion, dry-run

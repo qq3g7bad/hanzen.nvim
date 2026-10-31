@@ -14,7 +14,7 @@ end, {
   nargs = "?",
   range = true,
   bang = true,
-  desc = "Japanese width normalization (katakana|alphanum|all); ! = dry-run",
+  desc = "Japanese width normalization; ! = dry-run",
   complete = function(arglead)
     local out = {}
     for _, name in ipairs(require("hanzen").subcommands) do

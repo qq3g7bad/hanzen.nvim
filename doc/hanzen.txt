@@ -112,8 +112,10 @@ by design; behavior changes are recorded in CHANGELOG.
 	!	  dry-run. Reports which lines WOULD change via
 		  |vim.notify| and makes no edits.
 
-	The cursor and window view are preserved. A non-modifiable buffer
-	is reported, not an error.
+	Only the changed characters are rewritten: marks, extmarks
+	(diagnostics, signs) and the cursor stay on the text they were
+	on, and one |undo| reverts the whole command. A non-modifiable
+	buffer is reported, not an error.
 
 Examples: ~
 >
@@ -134,11 +136,16 @@ require("hanzen").convert({name}, {opts})
 	{name}	"katakana" | "alphanum" | "space" | "compat" |
 		"enclosed" | "all" | "flush-all"
 	{opts}	optional table: >
-		{ line1 = <int>, line2 = <int>, dry_run = <bool> }
-<	Returns: >
+		{ line1 = <int>, line2 = <int>, dry_run = <bool>,
+		  protect = "none" | "treesitter" }
+<		`protect` defaults to the configured value.
+	Returns: >
 		{ changed = <int>, lnums = <int[]>,
-		  dry_run = <bool>, blocked = <bool> }
-<
+		  dry_run = <bool>, blocked = <bool>,
+		  protect = <string>, degraded = <bool> }
+<		`lnums` lists each changed line once, in ascending order.
+		`degraded` is true when `protect = "treesitter"` was asked
+		for but no Markdown parser was available.
 							*hanzen.setup()*
 require("hanzen").setup({opts})		see |hanzen-config|.
 
@@ -148,8 +155,12 @@ require("hanzen").setup({opts})		see |hanzen-config|.
 Defaults: ~
 >
 	require("hanzen").setup({
-	  default = "katakana", -- bare :Hanzen subcommand
-	  notify  = true,       -- vim.notify summary after running
+	  default = "katakana",             -- bare :Hanzen subcommand
+	  notify  = true,                   -- vim.notify summary after running
+	  space_repeat = 1,                 -- U+3000 -> this many ASCII spaces
+	  space_keep_leading_indent = true, -- false: also convert a leading
+	                                    -- U+3000 run
+	  protect = "none",                 -- "treesitter": skip Markdown code
 	})
 <
 setup() is optional; :Hanzen works without it.
@@ -157,9 +168,13 @@ setup() is optional; :Hanzen works without it.
 ==============================================================================
 6. EXTENDING						*hanzen-extending*
 
-Each converter is a pure function(text) -> text. To add one, create
-lua/hanzen/<name>.lua exposing convert(), then register it in the
-`converters` table in lua/hanzen/init.lua and add its name to
-M.subcommands. The command and range engine need no changes.
+Each converter is a pure function(text, ctx) -> text. `text` is a line,
+or the part of one between protected spans; `ctx.at_line_start` says
+whether it begins the line. Most converters ignore `ctx`.
+
+To add one, create lua/hanzen/<name>.lua exposing convert(), then
+register it in the `converters` table in lua/hanzen/init.lua and add its
+name to `ALL` (every verb belongs to 'all') and to M.subcommands. The
+command and range engine need no changes.
 
 vim:tw=78:ts=8:noet:ft=help:norl:
