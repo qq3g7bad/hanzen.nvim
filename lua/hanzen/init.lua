@@ -2,8 +2,9 @@
 -- @file lua/hanzen/init.lua
 -- @brief Public API and converter registry for hanzen.nvim.
 --
--- Adding a converter = one module exposing `convert(text, ctx) -> text` plus
--- one line in `converters` below. The command layer never changes.
+-- Adding a converter = one module exposing `convert(text, ctx) -> text`,
+-- one line in `converters` and its name in `ALL` below. Subcommands and
+-- completion follow from `ALL`; the command layer never changes.
 --
 
 local M = {}
@@ -45,6 +46,10 @@ local flush_space = make_space(true)
 -- "Non-goals").
 local ALL = { "katakana", "alphanum", "space", "compat", "enclosed" }
 
+for name in pairs(converters) do
+  assert(vim.tbl_contains(ALL, name), "hanzen: '" .. name .. "' not in ALL")
+end
+
 -- One text function running every verb in turn, so the engine parses,
 -- counts and writes back once: a line with several kinds of target is
 -- reported once, not once per verb.
@@ -76,20 +81,63 @@ M.config = {
   protect = "none",
 }
 
----Subcommands exposed for `:Hanzen` completion.
-M.subcommands = {
-  "katakana",
-  "alphanum",
-  "space",
-  "compat",
-  "enclosed",
-  "all",
-  "flush-all",
+---Subcommands exposed for `:Hanzen` completion: every verb, then the
+---pseudo-converters.
+M.subcommands = vim.list_extend(vim.list_slice(ALL), { "all", "flush-all" })
+
+-- Option -> { check, what a valid value looks like }.
+local VALID = {
+  default = {
+    function(v)
+      return vim.tbl_contains(M.subcommands, v)
+    end,
+    "one of " .. table.concat(M.subcommands, ", "),
+  },
+  notify = {
+    function(v)
+      return type(v) == "boolean"
+    end,
+    "a boolean",
+  },
+  space_repeat = {
+    function(v)
+      return type(v) == "number" and v >= 0 and v % 1 == 0
+    end,
+    "an integer >= 0",
+  },
+  space_keep_leading_indent = {
+    function(v)
+      return type(v) == "boolean"
+    end,
+    "a boolean",
+  },
+  protect = {
+    function(v)
+      return v == "none" or v == "treesitter"
+    end,
+    '"none" or "treesitter"',
+  },
 }
 
+---Merge `opts` into the config. If any option is invalid, report it and
+---keep the previous config unchanged.
 ---@param opts? hanzen.Config
 function M.setup(opts)
-  M.config = vim.tbl_deep_extend("force", M.config, opts or {})
+  local new = vim.tbl_deep_extend("force", M.config, opts or {})
+  for key, rule in pairs(VALID) do
+    if not rule[1](new[key]) then
+      vim.notify(
+        ("hanzen: invalid %s = %s (expected %s); setup() ignored"):format(
+          key,
+          vim.inspect(new[key]),
+          rule[2]
+        ),
+        vim.log.levels.ERROR
+      )
+      return
+    end
+  end
+  M.config = new
 end
 
 local function summarize(lnums)
@@ -175,7 +223,7 @@ end
 ---@param cmd table Neovim user-command argument table.
 function M.run(cmd)
   local name = (cmd.fargs and cmd.fargs[1]) or M.config.default
-  if not (name == "all" or name == "flush-all" or converters[name]) then
+  if not vim.tbl_contains(M.subcommands, name) then
     vim.notify(
       ("hanzen: unknown subcommand '%s' (expected: %s)"):format(
         tostring(name),

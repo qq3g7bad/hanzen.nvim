@@ -25,6 +25,9 @@ All notable changes to hanzen.nvim are recorded here. The format follows
 
 ### Changed
 
+- `katakana` is about 40x faster on large buffers.
+- `setup()` validates its options; on an invalid value it reports an
+  error and keeps the previous configuration.
 - Converters receive a second argument, `ctx = { at_line_start = bool }`.
   Converters with one parameter keep working.
 - Development: the Makefile is replaced by `scripts/test.sh`,
