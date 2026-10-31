@@ -2,7 +2,7 @@
 -- @file lua/hanzen/init.lua
 -- @brief Public API and converter registry for hanzen.nvim.
 --
--- Adding a converter = one module exposing `convert(text) -> text` plus
+-- Adding a converter = one module exposing `convert(text, ctx) -> text` plus
 -- one line in `converters` below. The command layer never changes.
 --
 
@@ -11,17 +11,21 @@ local M = {}
 -- A closure (not a bare function ref) so it reads the current config at
 -- call time, after a possible `setup()`. `flush` forces leading-indent
 -- conversion regardless of the config — used internally by `flush-all`.
+-- A segment that follows protected code is not at the line start, so its
+-- U+3000 is never an indent.
 local function make_space(flush)
-  return function(text)
+  return function(text, ctx)
+    local at_start = not (ctx and ctx.at_line_start == false)
     return require("hanzen.space").convert(text, {
       repeat_n = M.config.space_repeat,
-      keep_leading_indent = (not flush) and M.config.space_keep_leading_indent
-        or false,
+      keep_leading_indent = not flush
+        and at_start
+        and M.config.space_keep_leading_indent,
     })
   end
 end
 
----@type table<string, fun(text: string): string>
+---@type table<string, fun(text: string, ctx?: { at_line_start: boolean }): string>
 local converters = {
   katakana = require("hanzen.katakana").convert,
   alphanum = require("hanzen.alphanum").convert,

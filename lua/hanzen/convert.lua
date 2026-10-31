@@ -2,13 +2,15 @@
 -- @file lua/hanzen/convert.lua
 -- @brief Range/buffer engine shared by every converter.
 --
--- Each converter is a pure `function(text) -> text`. This module applies
+-- Each converter is a pure `function(text, ctx) -> text`. This module applies
 -- one over a line range (or the whole buffer), preserves the cursor/view,
 -- and supports a non-mutating dry-run.
 --
 -- A `protect` provider (see protect.lua) may mark character spans the
 -- converter must skip. The engine slices each line into protected /
 -- unprotected segments and only feeds the unprotected ones to `text_fn`.
+-- `ctx.at_line_start` tells the converter whether its segment begins the
+-- line (only `space` cares, for the leading-indent rule).
 -- When nothing is protected (the default), each line takes the original
 -- one-call fast path, so behavior and performance are unchanged.
 --
@@ -60,24 +62,25 @@ end
 ---no buffer or treesitter access -- so it is unit-testable on its own.
 ---@param line string
 ---@param intervals integer[][]
----@param text_fn fun(text: string): string
+---@param text_fn fun(text: string, ctx: { at_line_start: boolean }): string
 ---@return string
 function M._convert_line(line, intervals, text_fn)
   if not intervals or #intervals == 0 then
-    return text_fn(line)
+    return text_fn(line, { at_line_start = true })
   end
   local parts = {}
   local pos = 0
   for _, iv in ipairs(intervals) do
     local a, b = iv[1], iv[2]
     if a > pos then
-      parts[#parts + 1] = text_fn(line:sub(pos + 1, a))
+      parts[#parts + 1] =
+        text_fn(line:sub(pos + 1, a), { at_line_start = pos == 0 })
     end
     parts[#parts + 1] = line:sub(a + 1, b) -- protected, verbatim
     pos = b
   end
   if pos < #line then
-    parts[#parts + 1] = text_fn(line:sub(pos + 1))
+    parts[#parts + 1] = text_fn(line:sub(pos + 1), { at_line_start = false })
   end
   return table.concat(parts)
 end
@@ -106,7 +109,7 @@ end
 ---`line1`/`line2` are order-independent: a reversed range (e.g. from a
 ---bottom-to-top Visual selection) is normalized here, so callers never
 ---need to sort the bounds themselves.
----@param text_fn fun(text: string): string
+---@param text_fn fun(text: string, ctx: { at_line_start: boolean }): string
 ---@param opts? { line1?: integer, line2?: integer, dry_run?: boolean, protect?: string }
 ---@return { changed: integer, lnums: integer[], dry_run: boolean, blocked: boolean, protect: string, degraded: boolean }
 function M.apply(text_fn, opts)
@@ -139,7 +142,8 @@ function M.apply(text_fn, opts)
     if raw then
       converted = M._convert_line(line, normalize(raw, #line), text_fn)
     else
-      converted = text_fn(line) -- fast path: nothing protected on this line
+      -- fast path: nothing protected on this line
+      converted = text_fn(line, { at_line_start = true })
     end
     out[i] = converted
     if converted ~= line then

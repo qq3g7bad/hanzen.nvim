@@ -108,6 +108,20 @@ describe("engine: protected-span segmentation", function()
     assert.equals("AAaa", engine._convert_line("aaaa", { { 2, 4 } }, up))
   end)
 
+  it("tells text_fn whether each segment starts the line", function()
+    local seen = {}
+    engine._convert_line("aabbaa", { { 2, 4 } }, function(text, ctx)
+      seen[#seen + 1] = ctx.at_line_start
+      return text
+    end)
+    assert.same({ true, false }, seen)
+    engine._convert_line("aa", {}, function(text, ctx)
+      seen[#seen + 1] = ctx.at_line_start
+      return text
+    end)
+    assert.same({ true, false, true }, seen)
+  end)
+
   it("handles multiple protected spans", function()
     assert.equals(
       "AaAaA",
@@ -164,6 +178,17 @@ describe("engine: treesitter protect (integration)", function()
       assert.same({ "ABC" }, get_buf())
     end
   )
+
+  it("treats U+3000 after inline code as interior, not indent", function()
+    if not ts_md_ok() then
+      pending("markdown treesitter parser not installed")
+      return
+    end
+    local FW = "\227\128\128" -- U+3000
+    set_buf({ "`x`" .. FW .. "a", FW .. FW .. "`x`" .. FW .. "a" })
+    hanzen.convert("space", { protect = "treesitter" })
+    assert.same({ "`x` a", FW .. FW .. "`x` a" }, get_buf())
+  end)
 
   it("converts every line of a non-Markdown buffer", function()
     vim.bo.filetype = "python"

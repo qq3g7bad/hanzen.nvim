@@ -18,8 +18,10 @@ local M = {}
 local FW = "\227\128\128" -- U+3000 in UTF-8 (E3 80 80)
 
 ---Convert the fullwidth space to ASCII space(s).
----The engine calls this once per line, so "leading" is the start of `text`.
----@param text string A single line.
+---"Leading" is the start of `text`. The engine passes a whole line, or a
+---segment of one between protected spans; for a segment that does not
+---start the line, the caller turns `keep_leading_indent` off.
+---@param text string A line, or a segment of one.
 ---@param opts? { repeat_n?: integer, keep_leading_indent?: boolean }
 ---@return string
 function M.convert(text, opts)
