@@ -1,4 +1,4 @@
--- Minimal init for headless test runs.
+-- Minimal init for headless test runs (see scripts/test.sh).
 --   nvim --headless --noplugin -u tests/minimal_init.lua \
 --     -c "PlenaryBustedDirectory tests/ { minimal_init = 'tests/minimal_init.lua' }"
 

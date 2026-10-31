@@ -20,13 +20,8 @@ jobs:
           neovim: true
           version: ${{ matrix.nvim }}
 
-      - name: Fetch plenary.nvim
-        run: |
-          git clone --depth 1 https://github.com/nvim-lua/plenary.nvim \
-            .deps/plenary.nvim
-
       - name: Run tests
-        run: make test
+        run: scripts/test.sh
 
   lint:
     runs-on: ubuntu-latest

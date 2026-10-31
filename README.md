@@ -160,9 +160,10 @@ set per call: `require("hanzen").convert("alphanum", { protect = "treesitter" })
 ## Development
 
 ```sh
-make test   # plenary headless specs (auto-fetches plenary.nvim)
-make lint   # stylua --check
-make fmt    # stylua
+scripts/test.sh                        # plenary headless specs (auto-fetches plenary.nvim)
+scripts/test.sh tests/space_spec.lua   # one spec file
+scripts/lint.sh                        # stylua --check
+scripts/fmt.sh                         # stylua
 ```
 
 ## License
