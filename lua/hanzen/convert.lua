@@ -4,7 +4,9 @@
 --
 -- Each converter is a pure `function(text, ctx) -> text`. This module applies
 -- one over a line range (or the whole buffer), preserves the cursor/view,
--- and supports a non-mutating dry-run.
+-- and supports a non-mutating dry-run. Only the bytes that actually change
+-- are written back, so marks, extmarks (diagnostics, signs) and LSP
+-- change events outside them are left alone.
 --
 -- A `protect` provider (see protect.lua) may mark character spans the
 -- converter must skip. The engine slices each line into protected /
@@ -105,6 +107,42 @@ local function bucket(spans, l1, l2)
   return by_lnum
 end
 
+-- UTF-8 continuation byte (10xxxxxx) at 1-indexed `i`; false past the end.
+local function is_cont(str, i)
+  local b = str:byte(i)
+  return b ~= nil and b >= 0x80 and b < 0xC0
+end
+
+-- The part of `old` that differs from `new`: returns the 0-indexed byte
+-- range [s, e) in `old` and its replacement. The range is widened to
+-- whole characters, so a mark or extmark never ends up mid-character.
+local function diff_span(old, new)
+  local n = math.min(#old, #new)
+  local s = 0
+  while s < n and old:byte(s + 1) == new:byte(s + 1) do
+    s = s + 1
+  end
+  while s > 0 and (is_cont(old, s + 1) or is_cont(new, s + 1)) do
+    s = s - 1
+  end
+  local q = 0 -- common suffix length
+  while q < n - s and old:byte(#old - q) == new:byte(#new - q) do
+    q = q + 1
+  end
+  while q > 0 and (is_cont(old, #old - q + 1) or is_cont(new, #new - q + 1)) do
+    q = q - 1
+  end
+  return s, #old - q, new:sub(s + 1, #new - q)
+end
+
+-- Convert one line, honoring its raw protected intervals (if any).
+local function convert_line(line, raw, text_fn)
+  if raw then
+    return M._convert_line(line, normalize(raw, #line), text_fn)
+  end
+  return text_fn(line, { at_line_start = true }) -- fast path
+end
+
 ---Apply a pure text function over a buffer range.
 ---`line1`/`line2` are order-independent: a reversed range (e.g. from a
 ---bottom-to-top Visual selection) is normalized here, so callers never
@@ -137,17 +175,10 @@ function M.apply(text_fn, opts)
   local lnums = {}
   for i, line in ipairs(lines) do
     local lnum = l1 + i - 1
-    local raw = by_lnum[lnum]
-    local converted
-    if raw then
-      converted = M._convert_line(line, normalize(raw, #line), text_fn)
-    else
-      -- fast path: nothing protected on this line
-      converted = text_fn(line, { at_line_start = true })
-    end
-    out[i] = converted
+    local converted = convert_line(line, by_lnum[lnum], text_fn)
     if converted ~= line then
       lnums[#lnums + 1] = lnum
+      out[lnum] = { line, converted }
     end
   end
 
@@ -161,10 +192,29 @@ function M.apply(text_fn, opts)
     return result(#lnums, lnums, opts, true, mode, degraded)
   end
 
-  -- Line count is preserved 1:1, so writing back the same bounds is safe.
+  -- Line count is preserved 1:1, so each line is patched in place. The
+  -- set_text calls of one command form a single undo step.
   local view = vim.fn.winsaveview()
-  vim.api.nvim_buf_set_lines(buf, l1 - 1, l2, false, out)
+  for _, lnum in ipairs(lnums) do
+    local s, e, mid = diff_span(out[lnum][1], out[lnum][2])
+    vim.api.nvim_buf_set_text(buf, lnum - 1, s, lnum - 1, e, { mid })
+  end
   vim.fn.winrestview(view)
+
+  -- winrestview put the cursor back at its old byte column; on a changed
+  -- line that is a different character. Its new column is the length of
+  -- the converted text before it, snapped to a character start.
+  local cur = out[view.lnum]
+  if cur then
+    local old, new = cur[1], cur[2]
+    local prefix = old:sub(1, view.col)
+    local raw = by_lnum[view.lnum]
+    local col = #convert_line(prefix, raw, text_fn)
+    if col < #new then
+      col = col + vim.str_utf_start(new, col + 1)
+    end
+    vim.api.nvim_win_set_cursor(0, { view.lnum, col })
+  end
 
   return result(#lnums, lnums, opts, false, mode, degraded)
 end

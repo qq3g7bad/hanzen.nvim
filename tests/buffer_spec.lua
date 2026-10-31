@@ -83,6 +83,52 @@ describe("buffer / range engine", function()
     assert.same({ " ア ABC" }, get_buf())
   end)
 
+  it("keeps marks and extmarks on unchanged lines", function()
+    set_buf({ "hello world", "ＡＢＣ" })
+    local ns = vim.api.nvim_create_namespace("hanzen_test")
+    local id = vim.api.nvim_buf_set_extmark(0, ns, 0, 6, {})
+    vim.fn.setpos("'a", { 0, 1, 7, 0 })
+    hanzen.convert("alphanum")
+    assert.same({ 0, 6 }, vim.api.nvim_buf_get_extmark_by_id(0, ns, id, {}))
+    assert.same({ 0, 1, 7, 0 }, vim.fn.getpos("'a"))
+  end)
+
+  it("keeps an extmark before the edit on a changed line", function()
+    set_buf({ "ab ＡＢＣ" })
+    local ns = vim.api.nvim_create_namespace("hanzen_test")
+    local id = vim.api.nvim_buf_set_extmark(0, ns, 0, 1, {})
+    hanzen.convert("alphanum")
+    assert.same({ "ab ABC" }, get_buf())
+    assert.same({ 0, 1 }, vim.api.nvim_buf_get_extmark_by_id(0, ns, id, {}))
+  end)
+
+  it("undoes 'all' in one step", function()
+    set_buf({ "ｱＡ", "x", "㍻" .. "\227\128\128" .. "㈱" })
+    vim.bo.undolevels = vim.bo.undolevels -- close the set_buf undo step
+    local before = vim.fn.undotree().seq_last
+    hanzen.convert("all")
+    vim.bo.undolevels = vim.bo.undolevels
+    assert.equals(before + 1, vim.fn.undotree().seq_last)
+    vim.cmd("silent undo")
+    assert.same({ "ｱＡ", "x", "㍻" .. "\227\128\128" .. "㈱" }, get_buf())
+  end)
+
+  it("keeps the cursor on the same character", function()
+    local function char_at_cursor()
+      local col = vim.api.nvim_win_get_cursor(0)[2]
+      return vim.fn.strcharpart(get_buf()[1]:sub(col + 1), 0, 1)
+    end
+    set_buf({ "ＡＢＣあいう" })
+    vim.api.nvim_win_set_cursor(0, { 1, 12 }) -- on い, after the edit
+    hanzen.convert("alphanum")
+    assert.equals("い", char_at_cursor())
+
+    set_buf({ "ＡＢＣあいう" })
+    vim.api.nvim_win_set_cursor(0, { 1, 6 }) -- on Ｃ, inside the edit
+    hanzen.convert("alphanum")
+    assert.equals("C", char_at_cursor())
+  end)
+
   it("reports a non-modifiable buffer instead of erroring", function()
     set_buf({ "ＡＢＣ" })
     vim.bo.modifiable = false
